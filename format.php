@@ -334,15 +334,107 @@ class qformat_xhtmlplus extends qformat_default {
         // Convert to HTML first, filters are applied at the end without the media plugin.
         $html = format_text($text, $format, ['noclean' => true, 'filter' => false, 'context' => $context]);
 
+        // Scripts written in the text are not copied into the static file (they would run when it is opened).
+        $html = $this->replace_scripts($html);
+
+        // Generico templates need their JavaScript and CSS: describe them instead.
+        $html = $this->replace_generico_tags($html);
+
         $html = $this->process_files_and_media($html, $question->contextid, $component, $filearea, $itemid);
 
         // Whatever is still a Moodle file (large images, audio, video, documents) links to the server.
         $html = question_rewrite_question_preview_urls($html, $question->id, $question->contextid,
                 $component, $filearea, $itemid, $question->contextid, 'qformat_xhtmlplus');
 
-        // The media plugin turns links into players that need Moodle's JavaScript: skip it.
+        // The media plugin and Generico produce players and widgets that need Moodle's JavaScript: skip them.
         return $this->text_filter_manager()->filter_text($html, $context,
-                ['originalformat' => $format, 'noclean' => true], ['mediaplugin']);
+                ['originalformat' => $format, 'noclean' => true], ['mediaplugin', 'generico']);
+    }
+
+    /**
+     * Replace <script> blocks written in a text with a note.
+     *
+     * A common case, a script that limits the number of checkboxes ("LIMIT = n"), is described.
+     *
+     * @param string $html
+     * @return string
+     */
+    protected function replace_scripts($html) {
+        if (stripos($html, '<script') === false) {
+            return $html;
+        }
+        return preg_replace_callback('~<script\b[^>]*>(.*?)</script\s*>~is', function ($m) {
+            $code = $m[1];
+            if (preg_match('~\bLIMIT\s*=\s*(\d+)~', $code, $limit) && stripos($code, 'checkbox') !== false) {
+                $text = $this->str('customscript_answerlimit', $limit[1]);
+            } else {
+                $text = $this->str('customscript');
+            }
+            // Keep any Generico tag found inside the script, so that it is still described.
+            preg_match_all('~\{GENERICO:.*?\}~is', $code, $tags);
+            return '<span class="generico-note">🧩 ' . s($text) . '</span>' . implode(' ', $tags[0]);
+        }, $html);
+    }
+
+    /**
+     * Replace {GENERICO:type="...",...} tags with a short note on what the student sees.
+     *
+     * Known templates (timer, limited audio/video plays, special-character keyboards, answer limit)
+     * are recognised from their name; any other template is shown with its name and parameters.
+     *
+     * @param string $html
+     * @return string
+     */
+    protected function replace_generico_tags($html) {
+        if (stripos($html, '{GENERICO:') === false) {
+            return $html;
+        }
+        $seen = [];
+        return preg_replace_callback('~\{GENERICO:(.*?)\}~is', function ($m) use (&$seen) {
+            $params = [];
+            $raw = str_replace(['&quot;', '&#34;', '“', '”'], '"', $m[1]);
+            preg_match_all('~([A-Za-z0-9_]+)\s*=\s*(?:"([^"]*)"|([^,"\s]*))~', $raw, $pairs, PREG_SET_ORDER);
+            foreach ($pairs as $pair) {
+                $params[strtolower($pair[1])] = $pair[2] !== '' ? $pair[2] : ($pair[3] ?? '');
+            }
+            $type = trim($params['type'] ?? '');
+            unset($params['type']);
+            // Closing tags of wrapping templates ("..._end") have nothing to show.
+            if ($type === '' || preg_match('~_end$~i', $type)) {
+                return '';
+            }
+            $number = function ($key) use ($params) {
+                return isset($params[$key]) && is_numeric($params[$key]) ? $params[$key] : null;
+            };
+
+            if (preg_match('~tastiera|keyboard|lingua_~i', $type)) {
+                $language = trim(preg_replace('~^(tastiera|keyboard|lingua)_?~i', '', $type), '_');
+                [$icon, $text] = ['⌨', $this->str('generico_keyboard', $language !== '' ? $language : $type)];
+            } else if (preg_match('~video~i', $type)) {
+                $plays = $number('maxplays');
+                [$icon, $text] = ['🎬', $plays !== null ? $this->str('generico_video', $plays) : $this->str('generico_video_nolimit')];
+            } else if (preg_match('~audio~i', $type)) {
+                $plays = $number('maxplays');
+                [$icon, $text] = ['🔊', $plays !== null ? $this->str('generico_audio', $plays) : $this->str('generico_audio_nolimit')];
+            } else if (preg_match('~tempo|timer|time~i', $type)) {
+                $seconds = $number('seconds');
+                [$icon, $text] = ['⏱', $seconds !== null ? $this->str('generico_timer', $seconds) : $this->str('generico_timer_default')];
+            } else if (preg_match('~limit~i', $type) && $number('limiterisposte') !== null) {
+                [$icon, $text] = ['☑', $this->str('generico_answerlimit', $number('limiterisposte'))];
+            } else {
+                $details = [];
+                foreach ($params as $key => $value) {
+                    $details[] = $key . '=' . $value;
+                }
+                [$icon, $text] = ['🧩', $this->str('generico_other', $type . ($details ? ' (' . implode(', ', $details) . ')' : ''))];
+            }
+            // The same template repeated in one text is described once.
+            if (isset($seen[$icon . $text])) {
+                return '';
+            }
+            $seen[$icon . $text] = true;
+            return '<span class="generico-note" title="' . s('Generico: ' . $type) . '">' . $icon . ' ' . s($text) . '</span>';
+        }, $html);
     }
 
     /**
@@ -1792,7 +1884,8 @@ class qformat_xhtmlplus extends qformat_default {
         $xp .= "<header class=\"doc-head\">\n<h1>" . s($title) . "</h1>\n";
         $xp .= '<p class="doc-meta">' . s($this->str('exportdate', userdate(time()))) . ' · '
                 . s($this->str('questionscount', $this->questionnumber)) . "</p>\n";
-        $xp .= '<div class="q-badges">' . $summary . "</div>\n</header>\n";
+        $xp .= '<div class="q-badges">' . $summary . "</div>\n";
+        $xp .= '<p class="doc-note">' . s($this->str('nosyntaxcheck')) . "</p>\n</header>\n";
         if ($toc !== '') {
             $xp .= '<details class="toc"><summary>' . s($this->str('contents')) . "</summary>\n" . $toc . "</details>\n";
         }

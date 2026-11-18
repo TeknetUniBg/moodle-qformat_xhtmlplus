@@ -54,6 +54,7 @@ Ogni domanda mostra il percorso della categoria, il tipo e il punteggio. In cima
 | Formulas | Variabili casuali e globali, e per ogni parte caselle, risposta, tipo, criterio di correttezza spiegato a parole, unità e feedback (non calcolati) |
 | Descrizione (description) | Solo il testo |
 | STACK | Risposta del docente al posto di ogni campo (valore della variabile, opzione corretta dei menu), tabella dei campi e feedback specifico. Variabili, alberi di risposta (test e punteggi a parole), nota e varianti stanno in un riquadro "Dettagli tecnici" da aprire, che si apre da solo in stampa. Non viene eseguito Maxima: le espressioni calcolate compaiono come ⟨...⟩ |
+| Template Generico nel testo | Al posto del widget, una nota: tastiera con caratteri speciali, ascolti/visualizzazioni limitati, domanda a tempo, limite di risposte, oppure nome e parametri del template |
 | Altri tipi | Testo e feedback generale, con l'avviso "non implementato" |
 
 Per tutti i tipi vengono mostrati anche il feedback combinato, i suggerimenti e il feedback generale. Le formule TeX vengono impaginate con MathJax quando il file viene aperto con una connessione a Internet.
