@@ -18,13 +18,13 @@
  * Version information for the calculated question type.
  *
  * @package    qformat_xhtmlplus
- * @copyright  2026 Giovanni Licari
+ * @copyright  2026 Giovanni Licari, Alessandro Lorenzi, Claudio Codice
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'qformat_xhtmlplus';
-$plugin->version   = 2024100710;
+$plugin->version   = 2026111810;
 $plugin->requires  = 2024100100;
 $plugin->maturity  = MATURITY_STABLE;

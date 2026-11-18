@@ -36,19 +36,27 @@ Per ogni domanda, il formato XHTML+ esporta:
 
 ## Tipi di Domande Supportati
 
-L'esportatore XHTML+ supporta **tutti** i seguenti tipi di domande:
+Ogni domanda mostra il percorso della categoria, il tipo e il punteggio. In cima al file ci sono il riepilogo per tipo e l'indice.
 
-1. ✅ **Vero/Falso** (truefalse)
-2. ✅ **Scelta Multipla** (multichoice) - risposta singola e multipla
-3. ✅ **Risposta Breve** (shortanswer)
-4. ✅ **Numerica** (numerical) - con tolleranza
-5. ✅ **Abbinamento** (match)
-6. ✅ **Essay/Scritto** (essay)
-7. ✅ **Risposta Multipla (Cloze)** (multianswer)
-8. ✅ **Calcolata** (calculated, calculatedmulti, calculatedsimple)
-9. ✅ **Drag and Drop** (ddimageortext, ddmarker, ddwtos)
-10. ✅ **Seleziona da Vuoto** (gapselect)
-11. ✅ **Descrizione** (description)
+| Tipo | Cosa mostra |
+|---|---|
+| Vero/Falso (truefalse) | Valore corretto e feedback di entrambe le risposte |
+| Scelta multipla (multichoice) | Tutte le opzioni, corrette evidenziate, punteggio parziale e feedback |
+| Risposta breve (shortanswer) | Tutte le risposte con punteggio e feedback, maiuscole/minuscole |
+| Numerica (numerical) | Risposte con tolleranza, punteggio, feedback e unità |
+| Abbinamento (match) | Ogni elemento con la sua risposta, più i distrattori |
+| Componimento (essay) | Impostazioni della risposta, informazioni per i valutatori, modello |
+| Cloze (multianswer) | Soluzioni dentro il testo e tabella di ogni spazio con tutte le risposte |
+| Calcolate (calculated, calculatedsimple, calculatedmulti) | Formula, tolleranza, variabili con intervallo e primi valori generati (letti dal database) |
+| Trascina nel testo (ddwtos), Seleziona parole mancanti (gapselect) | Soluzioni dentro il testo e tabella delle scelte con i distrattori |
+| Trascina su immagine (ddimageortext), Marcatori (ddmarker) | Immagine di sfondo con le soluzioni disegnate sopra, più tabella delle zone |
+| Ordinamento (ordering) | Elementi nell'ordine corretto |
+| Formulas | Variabili casuali e globali, e per ogni parte caselle, risposta, tipo, criterio di correttezza spiegato a parole, unità e feedback (non calcolati) |
+| Descrizione (description) | Solo il testo |
+| STACK | Risposta del docente al posto di ogni campo (valore della variabile, opzione corretta dei menu), tabella dei campi e feedback specifico. Variabili, alberi di risposta (test e punteggi a parole), nota e varianti stanno in un riquadro "Dettagli tecnici" da aprire, che si apre da solo in stampa. Non viene eseguito Maxima: le espressioni calcolate compaiono come ⟨...⟩ |
+| Altri tipi | Testo e feedback generale, con l'avviso "non implementato" |
+
+Per tutti i tipi vengono mostrati anche il feedback combinato, i suggerimenti e il feedback generale. Le formule TeX vengono impaginate con MathJax quando il file viene aperto con una connessione a Internet.
 
 ## Struttura del File HTML Esportato
 
@@ -218,6 +226,32 @@ Tutti i file sono stati validati:
 - ✅ Mobile-friendly
 - ✅ Stampa supportata
 
+## File e Contenuti Multimediali
+
+Vale per testo della domanda, risposte, feedback (generale e delle risposte) e sottodomande dell'abbinamento:
+
+- **Immagini caricate in Moodle** fino a 1 MB: incorporate nel file (base64), visibili offline e in stampa. Quelle più grandi restano un link al server Moodle.
+- **Audio e video caricati in Moodle**: riquadro con nome e dimensione del file più il player del browser, che funziona solo se si è collegati a Moodle. In stampa resta solo il riquadro.
+- **Link esterni a file audio/video** (es. `.mp3`, `.mp4`): riquadro con il link e il player del browser.
+- **YouTube, Vimeo e altri contenuti incorporati** (iframe): solo il link, senza player.
+- **Altri file** (PDF, documenti): link al server Moodle.
+
+Il filtro multimediale di Moodle non viene applicato, perché produce player che richiedono JavaScript; gli altri filtri (es. multilingua) sì.
+
+## Export da riga di comando per ID
+
+`cli/export_questions.php` esporta in un unico file un elenco di domande scelte per ID, anche da categorie diverse. Non modifica nulla.
+
+```bash
+# Moodle XML completo (con immagini e altri file), da importare in una categoria di test
+php question/format/xhtmlplus/cli/export_questions.php --ids=18600430,18605403 --output=/tmp/test.xml
+
+# Direttamente in formato XHTML+
+php question/format/xhtmlplus/cli/export_questions.php --idsfile=/tmp/ids.txt --format=xhtmlplus --output=/tmp/test.html
+```
+
+Con Moodle 5.1+ il percorso parte da `public/`. Le domande nascoste e le sottodomande del cloze vengono saltate.
+
 ## Note Importanti
 
 1. **Locale**: Tutte le stringhe usano il sistema di localizzazione di Moodle
@@ -229,3 +263,4 @@ Tutti i file sono stati validati:
 
 **Versione**: 1.0.0
 **Ultimo aggiornamento**: 2026
+**Autori**: Giovanni Licari, Alessandro Lorenzi, Claudio Codice
