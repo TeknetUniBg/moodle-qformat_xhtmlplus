@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version information for the calculated question type.
+ * Version information for the XHTML+ question export format.
  *
  * @package    qformat_xhtmlplus
  * @copyright  2026 Giovanni Licari
@@ -25,6 +25,6 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'qformat_xhtmlplus';
-$plugin->version   = 2024100710;
+$plugin->version   = 2026110900;
 $plugin->requires  = 2024100100;
 $plugin->maturity  = MATURITY_STABLE;

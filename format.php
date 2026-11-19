@@ -44,45 +44,118 @@ class qformat_xhtmlplus extends qformat_default {
     }
 
     /**
-     * Render question metadata section.
+     * Human readable label for a question type, falling back to the raw
+     * qtype name if the plugin providing it is not installed.
+     */
+    protected function get_question_type_label($qtype) {
+        $component = 'qtype_' . $qtype;
+        if (get_string_manager()->string_exists('pluginname', $component)) {
+            return get_string('pluginname', $component);
+        }
+        return $qtype;
+    }
+
+    /**
+     * Name of the category a question lives in, if it can be determined.
+     */
+    protected function get_question_category_name($question) {
+        global $DB;
+        if (empty($question->category)) {
+            return '';
+        }
+        $name = $DB->get_field('question_categories', 'name', array('id' => $question->category));
+        return $name ? format_string($name) : '';
+    }
+
+    /**
+     * Full name of the user who created a question, if it can be determined.
+     */
+    protected function get_question_author_name($question) {
+        global $DB;
+        if (empty($question->createdby)) {
+            return '';
+        }
+        $user = $DB->get_record('user', array('id' => $question->createdby),
+                'id, firstname, lastname, alternatename, firstnamephonetic, lastnamephonetic, middlename');
+        return $user ? fullname($user) : '';
+    }
+
+    /**
+     * Question bank version number, if the question_versions table is available.
+     */
+    protected function get_question_version($question) {
+        global $DB;
+        if (empty($question->id) || !$DB->get_manager()->table_exists('question_versions')) {
+            return '';
+        }
+        $version = $DB->get_field('question_versions', 'version', array('questionid' => $question->id));
+        return ($version === false) ? '' : $version;
+    }
+
+    /**
+     * Get tags for a question via the core Tag API.
+     */
+    protected function get_question_tags($question) {
+        if (!class_exists('core_tag_tag')) {
+            return array();
+        }
+        return core_tag_tag::get_item_tags_array('core_question', 'question', $question->id);
+    }
+
+    /**
+     * Render question metadata section: identifiers, dates, authorship and tags.
      */
     protected function render_metadata($question) {
-        $output = "<div class=\"question-metadata\">\n";
-
-        $output .= "  <div class=\"meta-row\">\n";
-        $output .= "    <span class=\"meta-label\">ID:</span>\n";
-        $output .= "    <span class=\"meta-value\">" . s($question->id) . "</span>\n";
-        $output .= "  </div>\n";
-
-        $output .= "  <div class=\"meta-row\">\n";
-        $output .= "    <span class=\"meta-label\">" . get_string('name','qformat_xhtmlplus') . ":</span>\n";
-        $output .= "    <span class=\"meta-value\">" . s($question->name) . "</span>\n";
-        $output .= "  </div>\n";
-
-        $output .= "  <div class=\"meta-row\">\n";
-        $output .= "    <span class=\"meta-label\">" . get_string('type','qformat_xhtmlplus') . ":</span>\n";
-        $output .= "    <span class=\"meta-value\">" . s($question->qtype) . "</span>\n";
-        $output .= "  </div>\n";
+        $rows = array();
+        $rows[] = array('ID', s($question->id));
+        $rows[] = array(get_string('name', 'qformat_xhtmlplus'), s($question->name));
+        $rows[] = array(get_string('type', 'qformat_xhtmlplus'), s($question->qtype));
 
         if (isset($question->defaultmark) && $question->defaultmark > 0) {
-            $output .= "  <div class=\"meta-row\">\n";
-            $output .= "    <span class=\"meta-label\">" . get_string('defaultmark','qformat_xhtmlplus') . ":</span>\n";
-            $output .= "    <span class=\"meta-value\">" . s($question->defaultmark) . "</span>\n";
-            $output .= "  </div>\n";
+            $rows[] = array(get_string('defaultmark', 'qformat_xhtmlplus'), s($question->defaultmark));
+        }
+
+        $category = $this->get_question_category_name($question);
+        if ($category !== '') {
+            $rows[] = array(get_string('category', 'qformat_xhtmlplus'), s($category));
+        }
+
+        if (!empty($question->timecreated)) {
+            $rows[] = array(get_string('createdon', 'qformat_xhtmlplus'), userdate($question->timecreated));
+        }
+
+        if (!empty($question->timemodified)) {
+            $rows[] = array(get_string('modifiedon', 'qformat_xhtmlplus'), userdate($question->timemodified));
+        }
+
+        $author = $this->get_question_author_name($question);
+        if ($author !== '') {
+            $rows[] = array(get_string('author', 'qformat_xhtmlplus'), s($author));
+        }
+
+        $version = $this->get_question_version($question);
+        if ($version !== '') {
+            $rows[] = array(get_string('version', 'qformat_xhtmlplus'), s($version));
+        }
+
+        $output = "<div class=\"question-metadata\">\n";
+        $output .= "  <div class=\"meta-grid\">\n";
+        foreach ($rows as $row) {
+            $output .= "    <div class=\"meta-item\"><span class=\"meta-label\">{$row[0]}</span><span class=\"meta-value\">{$row[1]}</span></div>\n";
+        }
+        $output .= "  </div>\n";
+
+        $tags = $this->get_question_tags($question);
+        if (!empty($tags)) {
+            $output .= "  <div class=\"tag-list\">";
+            foreach ($tags as $tag) {
+                $output .= "<span class=\"tag-pill\">" . s($tag) . "</span>";
+            }
+            $output .= "</div>\n";
         }
 
         $output .= "</div>\n";
         return $output;
-    }
-
-    /**
-     * Get tags for a question.
-     */
-    protected function get_question_tags($question) {
-        global $DB;
-        $tags = $DB->get_records('tag',
-            array('name' => $question->name), 'id', 'name');
-        return $tags;
     }
 
     /**
@@ -98,7 +171,7 @@ class qformat_xhtmlplus extends qformat_default {
                 $question->contextid, 'qformat_xhtmlplus');
 
         $output = "<div class=\"general-feedback\">\n";
-        $output .= "  <strong class=\"feedback-title\">" . get_string('generalfeedback', 'question') . ":</strong>\n";
+        $output .= "  <strong class=\"feedback-title\">" . get_string('generalfeedback', 'question') . "</strong>\n";
         $output .= "  <div class=\"feedback-content\">\n";
         $output .= "    " . format_text($text, $question->generalfeedbackformat, array('noclean' => true)) . "\n";
         $output .= "  </div>\n";
@@ -106,10 +179,26 @@ class qformat_xhtmlplus extends qformat_default {
         return $output;
     }
 
+    /**
+     * Render one answer row: a marker (shown only when correct) plus its text.
+     *
+     * @param string $text answer text.
+     * @param bool $correct whether to mark this row as the/a correct answer.
+     * @param bool $rawhtml if true, $text is inserted as-is instead of being escaped
+     *        with s() (used when the caller has already built safe markup).
+     */
+    protected function render_answer_row($text, $correct, $rawhtml = false) {
+        $class = $correct ? ' correct' : '';
+        $marker = $correct ? '&#10003;' : '';
+        $content = $rawhtml ? $text : s($text);
+        return "    <div class=\"answer-row{$class}\"><span class=\"answer-marker\">{$marker}</span>"
+                . "<span class=\"answer-text\">{$content}</span></div>\n";
+    }
+
     protected function writequestion($question) {
         global $OUTPUT;
 
-        if ($question->qtype=='category') {
+        if ($question->qtype == 'category') {
             return '';
         }
 
@@ -117,18 +206,27 @@ class qformat_xhtmlplus extends qformat_default {
         $expout = "<!-- question: {$id}  name: {$question->name}  type: {$question->qtype} -->\n";
         $expout .= "<div class=\"question\" id=\"q-{$id}\">\n";
 
+        $expout .= "  <div class=\"question-header\">\n";
+        $expout .= "    <h3 class=\"question-title\">" . s($question->name) . "</h3>\n";
+        $expout .= "    <span class=\"type-badge\">" . s($this->get_question_type_label($question->qtype)) . "</span>\n";
+        $expout .= "  </div>\n";
+
         // Metadata section
         $expout .= $this->render_metadata($question);
+
+        // Drag and drop question types embed [[N]] placeholders (or image drop
+        // zones) directly in the question text, which can look cryptic on its
+        // own, so name the interaction style right above the question text.
+        if (in_array($question->qtype, array('ddimageortext', 'ddmarker', 'ddwtos'), true)) {
+            $expout .= "  <p class=\"question-info\">" . s($this->get_question_type_label($question->qtype)) . "</p>\n";
+        }
 
         // Question text
         $text = question_rewrite_question_preview_urls($question->questiontext, $id,
                 $question->contextid, 'question', 'questiontext', $id,
                 $question->contextid, 'qformat_xhtmlplus');
-        $expout .= '<div class="question-text">';
-        $expout .= "  <h3>{$question->name}</h3>\n";
-        $expout .= '  <div class="questiontext">' . format_text($text,
+        $expout .= "  <div class=\"question-text\">" . format_text($text,
                 $question->questiontextformat, array('noclean' => true)) . "</div>\n";
-        $expout .= "</div>\n";
 
         // Selection depends on question type.
         switch($question->qtype) {
@@ -185,7 +283,6 @@ class qformat_xhtmlplus extends qformat_default {
      * Write true/false question.
      */
     protected function write_truefalse($question) {
-        $id = $question->id;
         $sttrue = get_string('true', 'qtype_truefalse');
         $stfalse = get_string('false', 'qtype_truefalse');
         $correct_tf = '';
@@ -196,23 +293,21 @@ class qformat_xhtmlplus extends qformat_default {
             }
         }
 
-        $true_class  = ($correct_tf == 'true')  ? ' class="correct-answer"' : '';
-        $false_class = ($correct_tf == 'false') ? ' class="correct-answer"' : '';
-        $true_badge  = ($correct_tf == 'true')  ? ' <span class="correct-badge">✔</span>' : '';
-        $false_badge = ($correct_tf == 'false') ? ' <span class="correct-badge">✔</span>' : '';
+        $true_correct  = ($correct_tf == trim(strtolower($sttrue)));
+        $false_correct = ($correct_tf == trim(strtolower($stfalse)));
 
         $expout = "<div class=\"question-content truefalse\">\n";
-        $expout .= "<ul class=\"truefalse\">\n";
-        $expout .= "  <li{$true_class}><input name=\"quest_{$id}\" type=\"radio\" value=\"{$sttrue}\" />{$sttrue}{$true_badge}</li>\n";
-        $expout .= "  <li{$false_class}><input name=\"quest_{$id}\" type=\"radio\" value=\"{$stfalse}\" />{$stfalse}{$false_badge}</li>\n";
-        $expout .= "</ul>\n";
+        $expout .= "  <div class=\"answer-list\">\n";
+        $expout .= $this->render_answer_row($sttrue, $true_correct);
+        $expout .= $this->render_answer_row($stfalse, $false_correct);
+        $expout .= "  </div>\n";
 
         foreach ($question->options->answers as $answer) {
             if (!empty($answer->feedback)) {
-                $expout .= "<div class=\"answer-feedback\">\n";
-                $expout .= "  <strong>" . ($answer->fraction > 0 ? $sttrue : $stfalse) . ":</strong> ";
+                $expout .= "  <div class=\"answer-feedback\">\n";
+                $expout .= "    <strong>" . ($answer->fraction > 0 ? $sttrue : $stfalse) . ":</strong> ";
                 $expout .= format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "\n";
-                $expout .= "</div>\n";
+                $expout .= "  </div>\n";
             }
         }
 
@@ -224,33 +319,23 @@ class qformat_xhtmlplus extends qformat_default {
      * Write multichoice question.
      */
     protected function write_multichoice($question) {
-        $id = $question->id;
         $expout = "<div class=\"question-content multichoice\">\n";
 
         if (!$question->options->single) {
             $expout .= "  <p class=\"question-info\">" . get_string('multipleanswers', 'qformat_xhtmlplus') . "</p>\n";
         }
 
-        $expout .= "<ul class=\"multichoice\">\n";
+        $expout .= "  <div class=\"answer-list\">\n";
         foreach ($question->options->answers as $answer) {
             $answertext = $this->repchar($answer->answer);
-            $is_correct = ($answer->fraction > 0);
-            $li_class = $is_correct ? ' class="correct-answer"' : '';
-            $badge = $is_correct ? ' <span class="correct-badge">✔</span>' : '';
-
-            if ($question->options->single) {
-                $expout .= "  <li{$li_class}><input name=\"quest_{$id}\" type=\"radio\" value=\""
-                        . s($answertext) . "\" />{$answertext}{$badge}</li>\n";
-            } else {
-                $expout .= "  <li{$li_class}><input name=\"quest_{$id}\" type=\"checkbox\" value=\""
-                        . s($answertext) . "\" />{$answertext}{$badge}</li>\n";
-            }
+            $iscorrect = ($answer->fraction > 0);
+            $expout .= $this->render_answer_row($answertext, $iscorrect);
 
             if (!empty($answer->feedback)) {
-                $expout .= "  <li class=\"answer-feedback\">" . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "</li>\n";
+                $expout .= "    <div class=\"answer-feedback\">" . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "</div>\n";
             }
         }
-        $expout .= "</ul>\n";
+        $expout .= "  </div>\n";
         $expout .= "</div>\n";
         return $expout;
     }
@@ -259,34 +344,19 @@ class qformat_xhtmlplus extends qformat_default {
      * Write short answer question.
      */
     protected function write_shortanswer($question) {
-        $id = $question->id;
         $expout = "<div class=\"question-content shortanswer\">\n";
-        $expout .= html_writer::start_tag('ul', array('class' => 'shortanswer'));
-        $expout .= html_writer::start_tag('li');
-        $expout .= html_writer::label(get_string('answer'), 'quest_'.$id, false, array('class' => 'accesshide'));
-        $expout .= html_writer::empty_tag('input', array('id' => "quest_{$id}", 'name' => "quest_{$id}", 'type' => 'text'));
-        $expout .= html_writer::end_tag('li');
-        $expout .= html_writer::end_tag('ul');
+        $expout .= "  <div class=\"answer-list\">\n";
 
-        $accepted_sa = [];
-        $feedback_list = [];
         foreach ($question->options->answers as $answer) {
             if ($answer->fraction > 0) {
-                $accepted_sa[] = '<strong>' . s($answer->answer) . '</strong>';
+                $expout .= $this->render_answer_row($answer->answer, true);
                 if (!empty($answer->feedback)) {
-                    $feedback_list[] = '<div class="answer-feedback">' . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . '</div>';
+                    $expout .= "    <div class=\"answer-feedback\">" . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "</div>\n";
                 }
             }
         }
 
-        if (!empty($accepted_sa)) {
-            $expout .= '<p class="answer-key">✔ ' . get_string('correctanswers', 'qtype_shortanswer') . ': ' . implode(' &nbsp;|&nbsp; ', $accepted_sa) . '</p>' . "\n";
-        }
-
-        if (!empty($feedback_list)) {
-            $expout .= implode("\n", $feedback_list);
-        }
-
+        $expout .= "  </div>\n";
         $expout .= "</div>\n";
         return $expout;
     }
@@ -295,36 +365,21 @@ class qformat_xhtmlplus extends qformat_default {
      * Write numerical question.
      */
     protected function write_numerical($question) {
-        $id = $question->id;
         $expout = "<div class=\"question-content numerical\">\n";
-        $expout .= html_writer::start_tag('ul', array('class' => 'numerical'));
-        $expout .= html_writer::start_tag('li');
-        $expout .= html_writer::label(get_string('answer'), 'quest_'.$id, false, array('class' => 'accesshide'));
-        $expout .= html_writer::empty_tag('input', array('id' => "quest_{$id}", 'name' => "quest_{$id}", 'type' => 'text'));
-        $expout .= html_writer::end_tag('li');
-        $expout .= html_writer::end_tag('ul');
+        $expout .= "  <div class=\"answer-list\">\n";
 
-        $accepted_num = [];
-        $feedback_list = [];
         foreach ($question->options->answers as $answer) {
             if ($answer->fraction > 0) {
                 $tol = isset($answer->tolerance) && $answer->tolerance > 0
-                     ? ' ±' . s($answer->tolerance) : '';
-                $accepted_num[] = '<strong>' . s($answer->answer) . $tol . '</strong>';
+                     ? ' &plusmn;' . s($answer->tolerance) : '';
+                $expout .= $this->render_answer_row(s($answer->answer) . $tol, true, true);
                 if (!empty($answer->feedback)) {
-                    $feedback_list[] = '<div class="answer-feedback">' . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . '</div>';
+                    $expout .= "    <div class=\"answer-feedback\">" . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "</div>\n";
                 }
             }
         }
 
-        if (!empty($accepted_num)) {
-            $expout .= '<p class="answer-key">✔ ' . get_string('answer', 'question') . ': ' . implode(' &nbsp;|&nbsp; ', $accepted_num) . '</p>' . "\n";
-        }
-
-        if (!empty($feedback_list)) {
-            $expout .= implode("\n", $feedback_list);
-        }
-
+        $expout .= "  </div>\n";
         $expout .= "</div>\n";
         return $expout;
     }
@@ -333,39 +388,20 @@ class qformat_xhtmlplus extends qformat_default {
      * Write match question.
      */
     protected function write_match($question) {
-        $id = $question->id;
         $expout = "<div class=\"question-content match\">\n";
-        $expout .= html_writer::start_tag('ul', array('class' => 'match'));
+        $expout .= "  <div class=\"answer-list\">\n";
 
-        $answerlist = array();
-        $correct_answers = array();
-        foreach ($question->options->subquestions as $subquestion) {
-            $answerlist[] = $this->repchar($subquestion->answertext);
-            $correct_answers[$subquestion->id] = $this->repchar($subquestion->answertext);
-        }
-        shuffle($answerlist);
-
-        $selectoptions = array();
-        foreach ($answerlist as $ans) {
-            $selectoptions[s($ans)] = s($ans);
-        }
-
-        $option = 0;
         foreach ($question->options->subquestions as $subquestion) {
             $questiontext = $this->repchar($subquestion->questiontext);
-            if ($questiontext != '') {
-                $correct_answer = $correct_answers[$subquestion->id];
-                $dropdown = html_writer::label(get_string('answer', 'qtype_match', $option+1), 'quest_'.$id.'_'.$option,
-                        false, array('class' => 'accesshide'));
-                $dropdown .= html_writer::select($selectoptions, "quest_{$id}_{$option}", s($correct_answer), false,
-                        array('id' => "quest_{$id}_{$option}"));
-                $expout .= html_writer::tag('li', $questiontext);
-                $expout .= $dropdown;
-                $expout .= '<p class="answer-key match-answer">✔ ' . get_string('answer', 'qtype_match') . ': <strong>' . s($correct_answer) . '</strong></p>';
-                $option++;
+            if ($questiontext == '') {
+                continue;
             }
+            $answertext = $this->repchar($subquestion->answertext);
+            $pair = '<strong>' . s($questiontext) . '</strong> &rarr; ' . s($answertext);
+            $expout .= $this->render_answer_row($pair, true, true);
         }
-        $expout .= html_writer::end_tag('ul');
+
+        $expout .= "  </div>\n";
         $expout .= "</div>\n";
         return $expout;
     }
@@ -377,20 +413,46 @@ class qformat_xhtmlplus extends qformat_default {
         $expout = "<div class=\"question-content essay\">\n";
 
         if (isset($question->options)) {
-            $expout .= "  <div class=\"essay-settings\">\n";
+            $rows = array();
             if (isset($question->options->responseformat)) {
-                $expout .= "    <p><strong>" . get_string('responseformat', 'qtype_essay') . ":</strong> " .
-                    s($question->options->responseformat) . "</p>\n";
+                $rows[] = array(get_string('responseformat', 'qtype_essay'), s($question->options->responseformat));
             }
             if (isset($question->options->responserequired)) {
-                $expout .= "    <p><strong>" . get_string('responserequired', 'qtype_essay') . ":</strong> " .
-                    ($question->options->responserequired ? get_string('yes') : get_string('no')) . "</p>\n";
+                $rows[] = array(get_string('responserequired', 'qtype_essay'),
+                        $question->options->responserequired ? get_string('yes') : get_string('no'));
+            }
+            if (!empty($question->options->minwordlimit)) {
+                $rows[] = array(get_string('minwordlimit', 'qtype_essay'), s($question->options->minwordlimit));
+            }
+            if (!empty($question->options->maxwordlimit)) {
+                $rows[] = array(get_string('maxwordlimit', 'qtype_essay'), s($question->options->maxwordlimit));
             }
             if (isset($question->options->attachments)) {
-                $expout .= "    <p><strong>" . get_string('attachments', 'qformat_xhtmlplus') . ":</strong> " .
-                    s($question->options->attachments) . "</p>\n";
+                $rows[] = array(get_string('attachments', 'qformat_xhtmlplus'), s($question->options->attachments));
             }
-            $expout .= "  </div>\n";
+
+            if (!empty($rows)) {
+                $expout .= "  <div class=\"meta-grid\">\n";
+                foreach ($rows as $row) {
+                    $expout .= "    <div class=\"meta-item\"><span class=\"meta-label\">{$row[0]}</span><span class=\"meta-value\">{$row[1]}</span></div>\n";
+                }
+                $expout .= "  </div>\n";
+            }
+
+            if (!empty($question->options->responsetemplate)) {
+                $expout .= "  <div class=\"question-info\"><strong>" . get_string('responsetemplate', 'qtype_essay') . "</strong></div>\n";
+                $expout .= "  <div class=\"question-text\">" . format_text($question->options->responsetemplate,
+                        $question->options->responsetemplateformat, array('noclean' => true)) . "</div>\n";
+            }
+
+            if (!empty($question->options->graderinfo)) {
+                $graderinfo = question_rewrite_question_preview_urls($question->options->graderinfo, $question->id,
+                        $question->contextid, 'qtype_essay', 'graderinfo', $question->id,
+                        $question->contextid, 'qformat_xhtmlplus');
+                $expout .= "  <div class=\"question-info\"><strong>" . get_string('graderinfo', 'qtype_essay') . "</strong></div>\n";
+                $expout .= "  <div class=\"question-text\">" . format_text($graderinfo,
+                        $question->options->graderinfoformat, array('noclean' => true)) . "</div>\n";
+            }
         }
 
         $expout .= "</div>\n";
@@ -404,28 +466,85 @@ class qformat_xhtmlplus extends qformat_default {
         $expout = "<div class=\"question-content multianswer\">\n";
 
         if (isset($question->options->questions) && is_array($question->options->questions)) {
-            $expout .= "  <div class=\"multianswer-questions\">\n";
+            $reconstructed = $question->questiontext;
+            $haveall = true;
+            $spacerows = '';
+            $index = 0;
+
             foreach ($question->options->questions as $subq) {
-                if ($subq && isset($subq->options->answers)) {
-                    $expout .= "    <div class=\"subquestion\">\n";
-                    foreach ($subq->options->answers as $answer) {
-                        if ($answer->fraction > 0) {
-                            $expout .= "      <div class=\"answer-item correct-answer\">\n";
-                            $expout .= "        <strong>" . s($answer->answer) . "</strong> <span class=\"correct-badge\">✔</span>\n";
-                            if (!empty($answer->feedback)) {
-                                $expout .= "        <div class=\"answer-feedback\">" . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "</div>\n";
-                            }
-                            $expout .= "      </div>\n";
-                        }
+                if (!$subq || !isset($subq->qtype) || $subq->qtype === 'subquestion_replacement'
+                        || !isset($subq->options->answers)) {
+                    continue;
+                }
+                $index++;
+
+                $accepted = $this->get_multianswer_accepted_answers($subq);
+                if (empty($accepted)) {
+                    $haveall = false;
+                    continue;
+                }
+
+                $placeholder = '{#' . $index . '}';
+                if (strpos($reconstructed, $placeholder) !== false) {
+                    $reconstructed = str_replace($placeholder, '<strong>' . $accepted[0]['text'] . '</strong>', $reconstructed);
+                } else {
+                    $haveall = false;
+                }
+
+                foreach ($accepted as $answer) {
+                    $label = '<strong>' . s(get_string('space', 'qformat_xhtmlplus', $index)) . ':</strong> ' . $answer['text'];
+                    $spacerows .= $this->render_answer_row($label, true, true);
+                    if ($answer['feedback'] !== '') {
+                        $spacerows .= "    <div class=\"answer-feedback\">" . $answer['feedback'] . "</div>\n";
                     }
-                    $expout .= "    </div>\n";
                 }
             }
-            $expout .= "  </div>\n";
+
+            if ($haveall && $index > 0) {
+                $expout .= $this->render_reconstructed_text($question, $reconstructed);
+            }
+
+            if ($spacerows !== '') {
+                $expout .= "  <div class=\"answer-list\">\n" . $spacerows . "  </div>\n";
+            }
         }
 
         $expout .= "</div>\n";
         return $expout;
+    }
+
+    /**
+     * All accepted (fraction > 0) answers for one embedded Cloze sub-question,
+     * highest fraction first. A sub-question is a full question object of its
+     * own qtype (numerical, shortanswer or multichoice - confirmed against
+     * Moodle core qtype_multianswer, which loads each one via the real
+     * get_question_options() of that qtype), so it can define more than one
+     * accepted answer (partial-credit alternatives, or several correct
+     * checkboxes for a multi-response gap) and, for numerical sub-questions,
+     * a tolerance - both are reflected here instead of only the first match.
+     *
+     * @return array of ['fraction' => float, 'text' => pre-escaped safe HTML, 'feedback' => safe HTML or ''].
+     */
+    protected function get_multianswer_accepted_answers($subq) {
+        $answers = array();
+        foreach ($subq->options->answers as $answer) {
+            if ($answer->fraction <= 0) {
+                continue;
+            }
+            $text = s($answer->answer);
+            if ($subq->qtype === 'numerical' && isset($answer->tolerance) && $answer->tolerance > 0) {
+                $text .= ' &plusmn;' . s($answer->tolerance);
+            }
+            $feedback = '';
+            if (!empty($answer->feedback)) {
+                $feedback = format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true));
+            }
+            $answers[] = array('fraction' => (float) $answer->fraction, 'text' => $text, 'feedback' => $feedback);
+        }
+        usort($answers, function($a, $b) {
+            return $b['fraction'] <=> $a['fraction'];
+        });
+        return $answers;
     }
 
     /**
@@ -433,24 +552,226 @@ class qformat_xhtmlplus extends qformat_default {
      */
     protected function write_calculated($question) {
         $expout = "<div class=\"question-content calculated\">\n";
-
-        if (isset($question->options->answers)) {
-            $expout .= "  <div class=\"answers\">\n";
-            foreach ($question->options->answers as $answer) {
-                if ($answer->fraction > 0) {
-                    $expout .= "    <div class=\"answer-item correct-answer\">\n";
-                    $expout .= "      <strong>" . s($answer->answer) . "</strong> <span class=\"correct-badge\">✔</span>\n";
-                    if (!empty($answer->feedback)) {
-                        $expout .= "      <div class=\"answer-feedback\">" . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "</div>\n";
-                    }
-                    $expout .= "    </div>\n";
-                }
-            }
-            $expout .= "  </div>\n";
-        }
-
+        $expout .= $this->render_calculated_sample($question);
         $expout .= "</div>\n";
         return $expout;
+    }
+
+    /**
+     * Best-effort extraction of one dataset item value per variable used by a
+     * calculated question.
+     */
+    protected function get_calculated_dataset_values($question) {
+        $values = array();
+
+        if (empty($question->options->datasets)) {
+            return $values;
+        }
+
+        foreach ($question->options->datasets as $dataset) {
+            if (!isset($dataset->name)) {
+                continue;
+            }
+            $item = null;
+            if (isset($dataset->items) && is_array($dataset->items)) {
+                $item = reset($dataset->items);
+            }
+            if (is_object($item) && isset($item->value)) {
+                $values[$dataset->name] = $item->value;
+            } else if (is_scalar($item)) {
+                $values[$dataset->name] = $item;
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * Render a worked example of a calculated question: the question text and
+     * the first correct-answer formula, with one set of dataset values
+     * substituted in, plus the evaluated result. The formula is evaluated with
+     * a small hand-written arithmetic parser (see evaluate_arithmetic_expression()),
+     * never with eval(), so nothing but basic arithmetic on the substituted
+     * numeric values can ever run. Silently renders nothing if the dataset or
+     * the formula cannot be safely substituted/evaluated (e.g. it uses
+     * functions like sqrt() or sin() that this parser does not support).
+     */
+    protected function render_calculated_sample($question) {
+        $datasetvalues = $this->get_calculated_dataset_values($question);
+        if (empty($datasetvalues) || !isset($question->options->answers)) {
+            return '';
+        }
+
+        $sampletext = $question->questiontext;
+        foreach ($datasetvalues as $name => $value) {
+            $sampletext = str_replace('{' . $name . '}', $value, $sampletext);
+        }
+
+        $answerrow = '';
+        $feedbackhtml = '';
+        foreach ($question->options->answers as $answer) {
+            if ($answer->fraction <= 0) {
+                continue;
+            }
+            $formula = $answer->answer;
+            foreach ($datasetvalues as $name => $value) {
+                $formula = str_replace('{' . $name . '}', $value, $formula);
+            }
+            $result = $this->evaluate_arithmetic_expression($formula);
+            if ($result !== null) {
+                $answerrow = $this->render_answer_row($this->format_calculated_result($result), true);
+                if (!empty($answer->feedback)) {
+                    $feedbackhtml = "    <div class=\"answer-feedback\">" . format_text($answer->feedback, $answer->feedbackformat, array('noclean' => true)) . "</div>\n";
+                }
+            }
+            break;
+        }
+
+        if ($answerrow === '') {
+            return '';
+        }
+
+        $output = $this->render_reconstructed_text($question, $sampletext);
+        $output .= "  <div class=\"answer-list\">\n" . $answerrow . $feedbackhtml . "  </div>\n";
+        return $output;
+    }
+
+    /**
+     * Format a computed numeric result for display: whole numbers show with no
+     * decimal point, otherwise trailing zeros are trimmed.
+     */
+    protected function format_calculated_result($value) {
+        if (floor($value) == $value) {
+            return (string) (int) round($value);
+        }
+        $formatted = rtrim(rtrim(sprintf('%.10f', $value), '0'), '.');
+        return ($formatted === '' || $formatted === '-') ? '0' : $formatted;
+    }
+
+    /**
+     * Safely evaluate a simple arithmetic expression (+, -, *, /, ^, parentheses,
+     * decimal numbers) without eval(), so only arithmetic on the substituted
+     * dataset values can ever run.
+     *
+     * @return float|null the result, or null if the expression contains
+     *         anything this parser does not recognise (e.g. a function call, or
+     *         a placeholder that was not substituted).
+     */
+    protected function evaluate_arithmetic_expression($expr) {
+        $expr = trim($expr);
+        if ($expr === '' || !preg_match('/^[0-9+\-*\/^().\s]+$/', $expr)) {
+            return null;
+        }
+        if (!preg_match_all('/\d+(?:\.\d+)?|[+\-*\/^()]/', $expr, $matches)) {
+            return null;
+        }
+        $tokens = $matches[0];
+        if (strlen(preg_replace('/\s+/', '', $expr)) !== strlen(implode('', $tokens))) {
+            return null;
+        }
+
+        $pos = 0;
+        $peek = function() use (&$tokens, &$pos) {
+            return $pos < count($tokens) ? $tokens[$pos] : null;
+        };
+        $next = function() use (&$tokens, &$pos) {
+            return $tokens[$pos++];
+        };
+
+        $parseexpression = null;
+        $parseterm = null;
+        $parsefactor = null;
+        $parseprimary = null;
+
+        $parseprimary = function() use (&$next, &$peek, &$parseprimary, &$parseexpression) {
+            $tok = $peek();
+            if ($tok === null) {
+                throw new Exception('unexpected end of expression');
+            }
+            if ($tok === '(') {
+                $next();
+                $value = $parseexpression();
+                if ($peek() !== ')') {
+                    throw new Exception('expected closing parenthesis');
+                }
+                $next();
+                return $value;
+            }
+            if ($tok === '-') {
+                $next();
+                return -$parseprimary();
+            }
+            if ($tok === '+') {
+                $next();
+                return $parseprimary();
+            }
+            if (is_numeric($tok)) {
+                $next();
+                return (float) $tok;
+            }
+            throw new Exception('unexpected token');
+        };
+
+        $parsefactor = function() use (&$peek, &$next, &$parseprimary) {
+            $value = $parseprimary();
+            while ($peek() === '^') {
+                $next();
+                $value = pow($value, $parseprimary());
+            }
+            return $value;
+        };
+
+        $parseterm = function() use (&$peek, &$next, &$parsefactor) {
+            $value = $parsefactor();
+            while ($peek() === '*' || $peek() === '/') {
+                $op = $next();
+                $rhs = $parsefactor();
+                if ($op === '*') {
+                    $value *= $rhs;
+                } else {
+                    if ((float) $rhs === 0.0) {
+                        throw new Exception('division by zero');
+                    }
+                    $value /= $rhs;
+                }
+            }
+            return $value;
+        };
+
+        $parseexpression = function() use (&$peek, &$next, &$parseterm) {
+            $value = $parseterm();
+            while ($peek() === '+' || $peek() === '-') {
+                $op = $next();
+                $rhs = $parseterm();
+                $value = ($op === '+') ? $value + $rhs : $value - $rhs;
+            }
+            return $value;
+        };
+
+        try {
+            $result = $parseexpression();
+            if ($pos !== count($tokens)) {
+                return null;
+            }
+            return $result;
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Render a copy of the question text with placeholders already substituted
+     * by the caller, labelled as a worked example, reusing the same URL
+     * rewriting and formatting as the real question text.
+     */
+    protected function render_reconstructed_text($question, $text) {
+        $rewritten = question_rewrite_question_preview_urls($text, $question->id,
+                $question->contextid, 'question', 'questiontext', $question->id,
+                $question->contextid, 'qformat_xhtmlplus');
+
+        $output = "  <div class=\"question-info\"><strong>" . get_string('sampleinstance', 'qformat_xhtmlplus') . "</strong></div>\n";
+        $output .= "  <div class=\"question-text\">" . format_text($rewritten, $question->questiontextformat, array('noclean' => true)) . "</div>\n";
+        return $output;
     }
 
     /**
@@ -458,16 +779,27 @@ class qformat_xhtmlplus extends qformat_default {
      */
     protected function write_dragdrop($question) {
         $expout = "<div class=\"question-content dragdrop\">\n";
-        $expout .= "  <p class=\"question-info\">" . get_string($question->qtype, 'qtype_' . $question->qtype) . "</p>\n";
 
-        if (isset($question->options)) {
-            if (isset($question->options->answers)) {
-                $expout .= "  <div class=\"answers\">\n";
-                foreach ($question->options->answers as $answer) {
-                    $expout .= "    <div class=\"answer-item\">" . s($answer->answer) . "</div>\n";
-                }
-                $expout .= "  </div>\n";
+        // Only ddwtos shares qtype_gapselect_base with gapselect (confirmed against
+        // Moodle core: qtype_ddwtos extends qtype_gapselect_base). ddmarker and
+        // ddimageortext extend a different, image-coordinate based class and have
+        // no [[N]] placeholders in their question text, so correctness cannot be
+        // determined the same way for them.
+        $correctids = array();
+        if ($question->qtype === 'ddwtos') {
+            $expout .= $this->render_gap_sample($question);
+            foreach ($this->get_gap_answers_by_place($question) as $answer) {
+                $correctids[$answer->id] = true;
             }
+        }
+
+        if (isset($question->options->answers)) {
+            $expout .= "  <p class=\"question-info\">" . get_string('availableoptions', 'qformat_xhtmlplus') . "</p>\n";
+            $expout .= "  <div class=\"answer-list\">\n";
+            foreach ($question->options->answers as $answer) {
+                $expout .= $this->render_answer_row($answer->answer, isset($correctids[$answer->id]));
+            }
+            $expout .= "  </div>\n";
         }
 
         $expout .= "</div>\n";
@@ -479,14 +811,20 @@ class qformat_xhtmlplus extends qformat_default {
      */
     protected function write_gapselect($question) {
         $expout = "<div class=\"question-content gapselect\">\n";
-        $expout .= "  <p class=\"question-info\">" . get_string('gapselect', 'qtype_gapselect') . "</p>\n";
+        $expout .= "  <p class=\"question-info\">" . s($this->get_question_type_label($question->qtype)) . "</p>\n";
+
+        $expout .= $this->render_gap_sample($question);
 
         if (isset($question->options->answers)) {
-            $expout .= "  <div class=\"answers\">\n";
+            $correctids = array();
+            foreach ($this->get_gap_answers_by_place($question) as $answer) {
+                $correctids[$answer->id] = true;
+            }
+
+            $expout .= "  <p class=\"question-info\">" . get_string('availableoptions', 'qformat_xhtmlplus') . "</p>\n";
+            $expout .= "  <div class=\"answer-list\">\n";
             foreach ($question->options->answers as $answer) {
-                if ($answer->fraction > 0) {
-                    $expout .= "    <div class=\"answer-item correct-answer\">" . s($answer->answer) . " <span class=\"correct-badge\">✔</span></div>\n";
-                }
+                $expout .= $this->render_answer_row($answer->answer, isset($correctids[$answer->id]));
             }
             $expout .= "  </div>\n";
         }
@@ -495,6 +833,51 @@ class qformat_xhtmlplus extends qformat_default {
         return $expout;
     }
 
+    /**
+     * For qtype_gapselect_base question types (gapselect, ddwtos): the number
+     * inside each [[N]] placeholder in the question text is a 1-based index
+     * into $question->options->answers ordered by id, identifying the correct
+     * choice for that gap. Confirmed against Moodle core
+     * (qtype_gapselect_base::initialise_question_instance() and
+     * question_type::get_question_options(), which loads answers "ORDER BY id").
+     *
+     * @return array place number => the answer object correct for that place.
+     */
+    protected function get_gap_answers_by_place($question) {
+        $places = array();
+        if (empty($question->options->answers)) {
+            return $places;
+        }
+
+        $answers = array_values($question->options->answers);
+        if (preg_match_all('/\[\[(\d+)\]\]/', $question->questiontext, $matches)) {
+            foreach ($matches[1] as $place) {
+                $index = ((int) $place) - 1;
+                if (isset($answers[$index])) {
+                    $places[$place] = $answers[$index];
+                }
+            }
+        }
+        return $places;
+    }
+
+    /**
+     * Render a worked example for a gapselect/ddwtos question: the question
+     * text with every [[N]] placeholder replaced by its correct choice.
+     */
+    protected function render_gap_sample($question) {
+        $places = $this->get_gap_answers_by_place($question);
+        if (empty($places)) {
+            return '';
+        }
+
+        $reconstructed = $question->questiontext;
+        foreach ($places as $place => $answer) {
+            $reconstructed = str_replace('[[' . $place . ']]', '<strong>' . s($answer->answer) . '</strong>', $reconstructed);
+        }
+
+        return $this->render_reconstructed_text($question, $reconstructed);
+    }
 
     protected function presave_process($content) {
         global $CFG;
