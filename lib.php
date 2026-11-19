@@ -18,7 +18,7 @@
  * Standard plugin entry points of the HTML question export format.
  *
  * @package    qformat_xhtmlplus
- * @copyright  2026 Giovanni Licari
+ * @copyright  2026 Giovanni Licari, Alessandro Lorenzi, Claudio Codice
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
